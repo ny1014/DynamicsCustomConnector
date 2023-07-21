@@ -1,0 +1,5 @@
+custom_connector_example
+custom_connector_integ_test
+custom_connector_queryfilter
+custom_connector_sdk
+custom_connector_tests

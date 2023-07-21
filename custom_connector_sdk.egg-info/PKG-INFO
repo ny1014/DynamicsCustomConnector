@@ -1,0 +1,9 @@
+Metadata-Version: 2.1
+Name: custom-connector-sdk
+Version: 1.0.5
+Summary: Amazon AppFlow Custom Connector SDK
+Home-page: https://github.com/awslabs/aws-appflow-custom-connector-python
+Author: Amazon AppFlow
+License: Apache License 2.0
+Requires-Python: >= 3.6
+License-File: LICENSE
