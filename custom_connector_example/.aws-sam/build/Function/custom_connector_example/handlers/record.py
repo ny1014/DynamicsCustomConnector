@@ -2,7 +2,7 @@ import json
 import logging
 from typing import List
 import urllib.parse
-from custom_connector_sdk.connector.auth import ACCESS_TOKEN
+
 import custom_connector_sdk.lambda_handler.requests as requests
 import custom_connector_sdk.lambda_handler.responses as responses
 import custom_connector_example.handlers.validation as validation
@@ -18,8 +18,10 @@ LOGGER.setLevel(logging.INFO)
 SALESFORCE_OBJECT_API_FORMAT = '{}services/data/{}/sobjects/{}'
 SALESFORCE_QUERY_FORMAT = '{}services/data/{}/query?q={}'
 # [Organization URI]/api/data/v9.2/accounts?$select=name
-D365_QUERY_FORMAT= '{}api/data/{}/{}'
+D365_QUERY_FORMAT= '{}api/USERINFO_URL_FORMATdata/{}/{}'
 import boto3
+
+from custom_connector_sdk.connector.auth import ACCESS_TOKEN
 from dynamics365crm.client import Client
 # SALESFORCE_SOBJECTS_URL_FORMAT = '{}services/data/{}/sobjects'
 # SALESFORCE_SOBJECT_DESCRIBE_URL_FORMAT = '{}services/data/{}/sobjects/{}/describe'
@@ -187,18 +189,16 @@ class SalesforceRecordHandler(RecordHandler):
 
 
         secrets_manager = boto3.client('secretsmanager')
+        # secret_arn
         secret = secrets_manager.get_secret_value(SecretId= request.connector_context.credentials.secret_arn)
-
         access_token = json.loads(secret["SecretString"])[ACCESS_TOKEN]
         LOGGER.error(f'hey!test access_token = {access_token}')
         client = Client("https://org1deca345.crm7.dynamics.com", access_token=access_token)
         list_accounts = client.get_accounts()
         LOGGER.error(f'hey!test list_contacts = {list_accounts}')
-
-     
-     
-
         res =  [json.dumps(record) for record in list_accounts['value']]
+        return responses.QueryDataResponse(is_success=True,
+                                           records=res)
         # api = 'https://org1deca345.crm7.dynamics.com/api/data/v9.2/accounts'
 
         # query_object = QueryObject(s_object=request.entity_identifier,
@@ -222,5 +222,4 @@ class SalesforceRecordHandler(RecordHandler):
         # if error_details:
         #     return responses.QueryDataResponse(is_success=False, error_details=error_details)
 
-        return responses.QueryDataResponse(is_success=True,
-                                           records=res)
+      

@@ -15,12 +15,13 @@ LOGGER.setLevel(logging.INFO)
 
 SALESFORCE_SOBJECTS_URL_FORMAT = '{}services/data/{}/sobjects'
 SALESFORCE_SOBJECT_DESCRIBE_URL_FORMAT = '{}services/data/{}/sobjects/{}/describe'
+# https://org1deca345.crm7.dynamics.com/api/data/v9.2/EntityDefinitions?$select=LogicalName&$filter=CanCreateAttributes/Value%20eq%20true
 # https://dev.{servername}/api/discovery/v9.1/Instances(UniqueName='myorg')  
 #  request_uri = url_format.format(instance_url, api_version, request_path)
 # [Organization URI]/api/data/v9.2/EntityDefinitions
 # /api/data/v9.2/EntityDefinitions(LogicalName='account') 
-D365_OBJECT_URL_FORMAT = '{}api/data/{}/EntityDefinitions' 
-D365_OBJECT_DESCRIBE_URL_FORMAT =  '{}api/data/{}/EntityDefinitions(LogicalName={})'
+D365_OBJECT_URL_FORMAT = '{}api/data/{}/EntityDefinitions?$select=LogicalName&$filter=CanCreateAttributes/Value%20eq%20true' 
+D365_OBJECT_DESCRIBE_URL_FORMAT =  "{}api/data/{}/EntityDefinitions(LogicalName='{}')?$select=LogicalName,SchemaName,DisplayName,LogicalCollectionName,EntitySetName,PrimaryIdAttribute&$expand=Attributes($select=LogicalName,AttributeType,DisplayName,IsPrimaryId,IsPrimaryName)"
 # https://org1deca345.crm7.dynamics.com/api/data/v9.2/EntityDefinitions(LogicalName='account')/Attributes
 # Salesforce response keys
 SOBJECTS_KEY = 'sobjects'
@@ -28,9 +29,9 @@ OBJECT_DESCRIBE_KEY = 'objectDescribe'
 CHILD_RELATIONSHIPS_KEY = 'childRelationships'
 HAS_SUBTYPES_KEY = 'hasSubtypes'
 NAME_KEY = 'name'
-FIELDS_KEY = 'fields'
+FIELDS_KEY = 'Attributes'
 TYPE_KEY = 'type'
-LABEL_KEY = 'label'
+LABEL_KEY = 'LogicalName'
 FILTERABLE_KEY = 'filterable'
 EXTERNAL_ID_KEY = 'externalId'
 ID_LOOKUP_KEY = 'idLookup'
@@ -53,29 +54,34 @@ def parse_entities(json_string: str) -> List[context.Entity]:
     parent_object = json.loads(json_string)
     entity_list = []
 
-    if parent_object.get(SOBJECTS_KEY):
-        sobjects = parent_object.get(SOBJECTS_KEY)
-        for sobject in sobjects:
-            entity_list.append(build_entity(sobject))
-    elif parent_object.get(OBJECT_DESCRIBE_KEY):
-        entity_list.append(build_entity(parent_object.get(OBJECT_DESCRIBE_KEY)))
+ 
+    for entity in parent_object['value']:
+        entity_list.append(build_entity(entity))
+    #     # print entity['restaurant']['name']
+    #     entity_list
+    # if parent_object.get(SOBJECTS_KEY):
+    #     sobjects = parent_object.get(SOBJECTS_KEY)
+    #     for sobject in sobjects:
+    #         entity_list.append(build_entity(sobject))
+    # elif parent_object.get(OBJECT_DESCRIBE_KEY):
+    #     entity_list.append(build_entity(parent_object.get(OBJECT_DESCRIBE_KEY)))
 
     return entity_list
 
 def build_entity(field: dict) -> context.Entity:
     """Build Entity from Salesforce field."""
-    description = field.get(LABEL_KEY)
-    has_child_relationships = CHILD_RELATIONSHIPS_KEY in field and len(field.get(CHILD_RELATIONSHIPS_KEY)) != 0
-    has_nested_entities = salesforce.get_boolean_value(field, HAS_SUBTYPES_KEY) or has_child_relationships
-    return context.Entity(entity_identifier=salesforce.get_string_value(field, NAME_KEY),
-                          label=description,
-                          has_nested_entities=has_nested_entities,
-                          description=description,
-                          is_writable=field.get(CREATEABLE_KEY))
+    logical_name = field.get(LABEL_KEY)
+    metadata_id = field.get('MetadataId')
+    return context.Entity(entity_identifier=logical_name,
+                          label=logical_name,
+                          has_nested_entities=False,
+                          description=logical_name,
+                          is_writable=False)
 
 def parse_entity_definition(json_string: str) -> context.EntityDefinition:
     """Parse JSON response from Salesforce query into an entity definition."""
     parent_object = json.loads(json_string)
+
     field_definitions = []
     entity = build_entity(parent_object)
 
@@ -87,38 +93,72 @@ def parse_entity_definition(json_string: str) -> context.EntityDefinition:
 
 def build_field_definition(field: dict) -> context.FieldDefinition:
     """Build FieldDefinition from Salesforce field.`"""
-    data_type_label = salesforce.get_string_value(field, TYPE_KEY)
+    data_type_label = salesforce.get_string_value(field, 'AttributeType')
     data_type = convert_data_type(data_type_label)
-    display_name = salesforce.get_string_value(field, LABEL_KEY)
-    read_operation_property = fields.ReadOperationProperty(is_queryable=salesforce
-                                                           .get_boolean_value(field, FILTERABLE_KEY),
-                                                           is_retrievable=True)
+    # display_name = salesforce.get_string_value(field, LABEL_KEY)
+    # read_operation_property = fields.ReadOperationProperty(is_queryable=salesforce
+    #                                                        .get_boolean_value(field, FILTERABLE_KEY),
+    #                                                        is_retrievable=True)
 
-    write_operation_types = set()
-    if salesforce.get_boolean_value(field, EXTERNAL_ID_KEY):
-        write_operation_types.add(responses.WriteOperationType.UPSERT)
-    elif salesforce.get_boolean_value(field, ID_LOOKUP_KEY):
-        write_operation_types.add(responses.WriteOperationType.UPDATE)
-        write_operation_types.add(responses.WriteOperationType.UPSERT)
-    write_operation_property = fields.WriteOperationProperty(is_creatable=salesforce
-                                                             .get_boolean_value(field, CREATEABLE_KEY),
-                                                             is_updatable=salesforce
-                                                             .get_boolean_value(field, UPDATEABLE_KEY),
-                                                             is_nullable=salesforce
-                                                             .get_boolean_value(field, NILLABLE_KEY),
-                                                             is_defaulted_on_create=salesforce
-                                                             .get_boolean_value(field, DEFAULTED_ON_CREATE_KEY),
-                                                             supported_write_operations=list(write_operation_types))
+    # write_operation_types = set()
+    # if salesforce.get_boolean_value(field, EXTERNAL_ID_KEY):
+    #     write_operation_types.add(responses.WriteOperationType.UPSERT)
+    # elif salesforce.get_boolean_value(field, ID_LOOKUP_KEY):
+    #     write_operation_types.add(responses.WriteOperationType.UPDATE)
+    #     write_operation_types.add(responses.WriteOperationType.UPSERT)
+    # write_operation_property = fields.WriteOperationProperty(is_creatable=salesforce
+    #                                                          .get_boolean_value(field, CREATEABLE_KEY),
+    #                                                          is_updatable=salesforce
+    #                                                          .get_boolean_value(field, UPDATEABLE_KEY),
+    #                                                          is_nullable=salesforce
+    #                                                          .get_boolean_value(field, NILLABLE_KEY),
+    #                                                          is_defaulted_on_create=salesforce
+    #                                                          .get_boolean_value(field, DEFAULTED_ON_CREATE_KEY),
+    #                                                          supported_write_operations=list(write_operation_types))
 
-    return context.FieldDefinition(field_name=salesforce.get_string_value(field, NAME_KEY),
-                                   data_type=data_type,
-                                   data_type_label=data_type_label,
-                                   label=display_name,
-                                   description=display_name,
-                                   default_value=salesforce.get_string_value(field, DEFAULT_VALUE_KEY),
-                                   is_primary_key=salesforce.get_boolean_value(field, UNIQUE_KEY),
-                                   read_properties=read_operation_property,
-                                   write_properties=write_operation_property)
+    # return context.FieldDefinition(field_name=salesforce.get_string_value(field, NAME_KEY),
+    #                                data_type=data_type,
+    #                                data_type_label=data_type_label,
+    #                                label=display_name,
+    #                                description=display_name,
+    #                                default_value=salesforce.get_string_value(field, DEFAULT_VALUE_KEY),
+    #                                is_primary_key=salesforce.get_boolean_value(field, UNIQUE_KEY),
+    #                                read_properties=read_operation_property,
+    #                                write_properties=write_operation_property)
+
+    
+        # name = context.FieldDefinition(
+        # field_name="name",
+        # data_type=fields.FieldDataType.String,
+        # data_type_label="string",
+        # label="name",
+        # description="name",
+        # default_value="1970-01-01 00:00:00",
+        # is_primary_key=False,
+        # read_properties=fields.ReadOperationProperty(
+        #     is_queryable=True,
+        #     is_retrievable=True,
+        #     is_nullable=False,
+        #     is_timestamp_field_for_incremental_queries=False,
+        # ),
+        # write_properties=None,
+        # )
+
+
+    return context.FieldDefinition(field_name=field.get('LogicalName'),
+                                data_type=data_type,
+                                data_type_label=data_type_label,
+                                label=field.get('LogicalName'),
+                                description=field.get('LogicalName'),
+                                default_value="1970-01-01 00:00:00",
+                                is_primary_key=field.get('IsPrimaryId'),
+                                read_properties=fields.ReadOperationProperty(
+                                is_queryable=True,
+                                is_retrievable=True,
+                                is_nullable=False,
+                                is_timestamp_field_for_incremental_queries=False,
+                                 ),
+                                write_properties=None)
 
 def convert_data_type(data_type_name: str):
     data_type_map = {
@@ -147,29 +187,31 @@ class SalesforceMetadataHandler(MetadataHandler):
         #     return responses.ListEntitiesResponse(is_success=False, error_details=error_details)
 
 
-        # LOGGER.error('testentities_path :'+ request.entities_path)
-        # if request.entities_path:
-        #     request_uri = salesforce.build_salesforce_request_uri(connector_context=request.connector_context,
-        #                                                           url_format=D365_OBJECT_URL_FORMAT,
-        #                                                           request_path=request.entities_path)
-        # else:
-        #     request_uri = salesforce.build_salesforce_request_uri(connector_context=request.connector_context,
-        #                                                           url_format=D365_OBJECT_URL_FORMAT,
-        #                                                           request_path='')
+        
+        if request.entities_path:
+            request_uri = salesforce.build_salesforce_request_uri(connector_context=request.connector_context,
+                                                                  url_format=D365_OBJECT_URL_FORMAT,
+                                                                  request_path=request.entities_path)
+        else:
+            request_uri = salesforce.build_salesforce_request_uri(connector_context=request.connector_context,
+                                                                  url_format=D365_OBJECT_URL_FORMAT,
+                                                                  request_path='')
 
-    
-        # LOGGER.error('test request url :'+request_uri)
+        salesforce_response = salesforce.get_salesforce_client(request.connector_context).rest_get(request_uri)
+        error_details = salesforce.check_for_errors_in_salesforce_response(salesforce_response)
 
-        # salesforce_response = salesforce.get_salesforce_client(request.connector_context).rest_get(request_uri)
-        # error_details = salesforce.check_for_errors_in_salesforce_response(salesforce_response)
 
-        # if error_details:
-        #     return responses.ListEntitiesResponse(is_success=False, error_details=error_details)
-        # return responses.ListEntitiesResponse(is_success=True, entities=parse_entities(salesforce_response.response))
+        # LOGGER.error(f'salesforce_response.response = {salesforce_response.response.value}')
+        if error_details:
+            return responses.ListEntitiesResponse(is_success=False, error_details=error_details)
+        
 
-        entity_list = [ACCOUNT_ENTITY]
+       
+        return responses.ListEntitiesResponse(is_success=True, entities=parse_entities(salesforce_response.response))
 
-        return responses.ListEntitiesResponse(is_success=True, entities=entity_list)
+        # entity_list = [ACCOUNT_ENTITY]
+
+        # return responses.ListEntitiesResponse(is_success=True, entities=entity_list)
 
     def describe_entity(self, request: requests.DescribeEntityRequest) -> responses.DescribeEntityResponse:
         # error_details = validation.validate_request_connector_context(request)
@@ -177,17 +219,25 @@ class SalesforceMetadataHandler(MetadataHandler):
         #     LOGGER.error('DescribeEntity request failed with ' + str(error_details))
         #     return responses.DescribeEntityResponse(is_success=False, error_details=error_details)
 
-        # request_uri = salesforce.build_salesforce_request_uri(connector_context=request.connector_context,
-        #                                                       url_format=D365_OBJECT_DESCRIBE_URL_FORMAT,
-        #                                                       request_path=request.entity_identifier)
 
-        # salesforce_response = salesforce.get_salesforce_client(request.connector_context).rest_get(request_uri)
-        # error_details = salesforce.check_for_errors_in_salesforce_response(salesforce_response)
+        LOGGER.error(f'test -> request.entity_identifier === {request.entity_identifier}')
+        request_uri = salesforce.build_salesforce_request_uri(connector_context=request.connector_context,
+                                                              url_format=D365_OBJECT_DESCRIBE_URL_FORMAT,
+                                                              request_path=request.entity_identifier)
+        # LOGGER.error(f'test ->request_uri === {request_uri}')
+        salesforce_response = salesforce.get_salesforce_client(request.connector_context).rest_get(request_uri)
+        error_details = salesforce.check_for_errors_in_salesforce_response(salesforce_response)
 
-        # if error_details:
-        #     return responses.DescribeEntityResponse(is_success=False, error_details=error_details)
-        # return responses.DescribeEntityResponse(is_success=True,
-        #                                         entity_definition=parse_entity_definition(salesforce_response.response))
+        LOGGER.error(f'salesforce_response.response =>> {salesforce_response.response}')
+        if error_details:
+            return responses.DescribeEntityResponse(is_success=False, error_details=error_details)
+        
+
+        parsed_entity_definition = parse_entity_definition(salesforce_response.response)
+
+        LOGGER.error(f'test parsed entity_definition =>> {parsed_entity_definition}')
+        return responses.DescribeEntityResponse(is_success=True,
+                                                entity_definition=parsed_entity_definition)
         
 
         name = context.FieldDefinition(
@@ -206,6 +256,8 @@ class SalesforceMetadataHandler(MetadataHandler):
         ),
         write_properties=None,
         )
+
+
         entity_definition = context.EntityDefinition(
             entity=ACCOUNT_ENTITY,
             fields=[
