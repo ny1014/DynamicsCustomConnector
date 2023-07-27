@@ -11,14 +11,16 @@ from custom_connector_sdk.lambda_handler.handlers import RecordHandler
 from custom_connector_sdk.connector.fields import WriteOperationType, FieldDataType
 from custom_connector_sdk.connector.context import ConnectorContext
 from custom_connector_example.query.builder import QueryObject, build_query
-
+import custom_connector_example.constants as constants
 LOGGER = logging.getLogger()
 LOGGER.setLevel(logging.INFO)
 
 SALESFORCE_OBJECT_API_FORMAT = '{}services/data/{}/sobjects/{}'
 SALESFORCE_QUERY_FORMAT = '{}services/data/{}/query?q={}'
 # [Organization URI]/api/data/v9.2/accounts?$select=name
-D365_QUERY_FORMAT= '{}api/USERINFO_URL_FORMATdata/{}/{}'
+# D365_QUERY_FORMAT= '{}api/data/{}'
+
+D365_QUERY_FORMAT = '{}api/data/{}/aadusers?$select={}'
 import boto3
 
 from custom_connector_sdk.connector.auth import ACCESS_TOKEN
@@ -32,7 +34,7 @@ from dynamics365crm.client import Client
 # For example, to retrieve basic information about an Account object in version 58.0 use 
 # https://MyDomainName.my.salesforce.com/services/data/v58.0/sobjects/Account.
 # Salesforce response keys
-RECORDS_KEY = 'records'
+RECORDS_KEY = 'value'
 SUCCESS_KEY = 'success'
 ID_KEY = 'id'
 ERRORS_KEY = 'errors'
@@ -181,45 +183,41 @@ class SalesforceRecordHandler(RecordHandler):
         )
 
     def query_data(self, request: requests.QueryDataRequest) -> responses.QueryDataResponse:
-        # error_details = validation.validate_request_connector_context(request)
-        # if error_details:
-        #     LOGGER.error('QueryData request failed with ' + str(error_details))
-        #     return responses.QueryDataResponse(is_success=False, error_details=error_details)
 
 
 
-        secrets_manager = boto3.client('secretsmanager')
-        # secret_arn
-        secret = secrets_manager.get_secret_value(SecretId= request.connector_context.credentials.secret_arn)
-        access_token = json.loads(secret["SecretString"])[ACCESS_TOKEN]
-        LOGGER.error(f'hey!test access_token = {access_token}')
-        client = Client("https://org1deca345.crm7.dynamics.com", access_token=access_token)
-        list_accounts = client.get_accounts()
-        LOGGER.error(f'hey!test list_contacts = {list_accounts}')
-        res =  [json.dumps(record) for record in list_accounts['value']]
+        error_details = validation.validate_request_connector_context(request)
+        if error_details:
+            LOGGER.error('QueryData request failed with ' + str(error_details))
+            return responses.QueryDataResponse(is_success=False, error_details=error_details)
+
+        LOGGER.error('test => Selected filed' + ','.join(request.selected_field_names))
+        LOGGER.error('test => Selected entity' +  request.entity_identifier)
+
+        instance_url= request.connector_context.connector_runtime_settings.get(constants.INSTANCE_URL_KEY)
+        instance_url = salesforce.add_path(instance_url)
+        api_version = request.connector_context.api_version
+
+        fetch_entity_collection_name_url = f"{instance_url}/api/data/{api_version}/EntityDefinitions(LogicalName='{request.entity_identifier}')?$select=LogicalName,LogicalCollectionName"
+        entity_collection_name_response = salesforce.get_salesforce_client(request.connector_context).rest_get(fetch_entity_collection_name_url) 
+        entity_obj = json.loads(entity_collection_name_response.response)
+        entity_collection_name = entity_obj['LogicalCollectionName']
+        LOGGER.error(f"test-responses_list {entity_collection_name}")
+        select = ','.join(request.selected_field_names)
+
+        query =   f'{instance_url}api/data/{api_version}/{entity_collection_name}?$select={select}'
+
+        salesforce_response = salesforce.get_salesforce_client(request.connector_context).rest_get(query) 
+        LOGGER.error(f'adduser status code: {salesforce_response.status_code}')
+        LOGGER.error(f'adduser name records: {salesforce_response.response}')
+    
+   
+        error_details = salesforce.check_for_errors_in_salesforce_response(salesforce_response)
+        if error_details:
+            return responses.QueryDataResponse(is_success=False, error_details=error_details)
+
         return responses.QueryDataResponse(is_success=True,
-                                           records=res)
-        # api = 'https://org1deca345.crm7.dynamics.com/api/data/v9.2/accounts'
-
-        # query_object = QueryObject(s_object=request.entity_identifier,
-        #                            selected_field_names=request.selected_field_names,
-        #                            filter_expression=request.filter_expression,
-        #                            entity_definition=request.connector_context.entity_definition)
-
-        # https_client = salesforce.get_salesforce_client(request.connector_context)
-        # https_client.rest_get(api)
-
-# query_object
-        # salesforce_response =  https_client.rest_get(api)
-        
-        # LOGGER.error(f'hey!test response = {salesforce_response}')
-        # error_details = salesforce.check_for_errors_in_salesforce_response(salesforce_response)
-
-
-
-
-
-        # if error_details:
-        #     return responses.QueryDataResponse(is_success=False, error_details=error_details)
-
-      
+                                           records=parse_query_response(salesforce_response.response))
+    
+    
+    

@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: msal
-Version: 1.22.0
+Version: 1.23.0
 Summary: The Microsoft Authentication Library (MSAL) for Python library enables your app to access the Microsoft Cloud by supporting authentication of users with Microsoft Azure Active Directory accounts (AAD) and Microsoft Accounts (MSA) using industry standard OAuth2 and OpenID Connect.
 Home-page: https://github.com/AzureAD/microsoft-authentication-library-for-python
 Author: Microsoft Corporation
@@ -8,7 +8,7 @@ Author-email: nugetaad@microsoft.com
 License: MIT
 Project-URL: Changelog, https://github.com/AzureAD/microsoft-authentication-library-for-python/releases
 Project-URL: Documentation, https://msal-python.readthedocs.io/
-Project-URL: Questions, https://stackoverflow.com/questions/tagged/msal+python
+Project-URL: Questions, https://stackoverflow.com/questions/tagged/azure-ad-msal+python
 Project-URL: Feature/Bug Tracker, https://github.com/AzureAD/microsoft-authentication-library-for-python/issues
 Classifier: Development Status :: 5 - Production/Stable
 Classifier: Programming Language :: Python
@@ -28,7 +28,7 @@ Description-Content-Type: text/markdown
 License-File: LICENSE
 Requires-Dist: requests (<3,>=2.0.0)
 Requires-Dist: PyJWT[crypto] (<3,>=1.0.0)
-Requires-Dist: cryptography (<43,>=0.6)
+Requires-Dist: cryptography (<44,>=0.6)
 Requires-Dist: mock ; python_version < "3.3"
 Provides-Extra: broker
 Requires-Dist: pymsalruntime (<0.14,>=0.13.2) ; (python_version >= "3.6" and platform_system == "Windows") and extra == 'broker'

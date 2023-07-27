@@ -32,6 +32,7 @@ NAME_KEY = 'name'
 FIELDS_KEY = 'Attributes'
 TYPE_KEY = 'type'
 LABEL_KEY = 'LogicalName'
+# 'LogicalCollectionName'
 FILTERABLE_KEY = 'filterable'
 EXTERNAL_ID_KEY = 'externalId'
 ID_LOOKUP_KEY = 'idLookup'
@@ -53,8 +54,6 @@ def parse_entities(json_string: str) -> List[context.Entity]:
     """Parse JSON response from Salesforce query into a list of Entities."""
     parent_object = json.loads(json_string)
     entity_list = []
-
- 
     for entity in parent_object['value']:
         entity_list.append(build_entity(entity))
     #     # print entity['restaurant']['name']
@@ -71,7 +70,7 @@ def parse_entities(json_string: str) -> List[context.Entity]:
 def build_entity(field: dict) -> context.Entity:
     """Build Entity from Salesforce field."""
     logical_name = field.get(LABEL_KEY)
-    metadata_id = field.get('MetadataId')
+    # metadata_id = field.get('MetadataId')
     return context.Entity(entity_identifier=logical_name,
                           label=logical_name,
                           has_nested_entities=False,
@@ -95,61 +94,14 @@ def build_field_definition(field: dict) -> context.FieldDefinition:
     """Build FieldDefinition from Salesforce field.`"""
     data_type_label = salesforce.get_string_value(field, 'AttributeType')
     data_type = convert_data_type(data_type_label)
-    # display_name = salesforce.get_string_value(field, LABEL_KEY)
-    # read_operation_property = fields.ReadOperationProperty(is_queryable=salesforce
-    #                                                        .get_boolean_value(field, FILTERABLE_KEY),
-    #                                                        is_retrievable=True)
-
-    # write_operation_types = set()
-    # if salesforce.get_boolean_value(field, EXTERNAL_ID_KEY):
-    #     write_operation_types.add(responses.WriteOperationType.UPSERT)
-    # elif salesforce.get_boolean_value(field, ID_LOOKUP_KEY):
-    #     write_operation_types.add(responses.WriteOperationType.UPDATE)
-    #     write_operation_types.add(responses.WriteOperationType.UPSERT)
-    # write_operation_property = fields.WriteOperationProperty(is_creatable=salesforce
-    #                                                          .get_boolean_value(field, CREATEABLE_KEY),
-    #                                                          is_updatable=salesforce
-    #                                                          .get_boolean_value(field, UPDATEABLE_KEY),
-    #                                                          is_nullable=salesforce
-    #                                                          .get_boolean_value(field, NILLABLE_KEY),
-    #                                                          is_defaulted_on_create=salesforce
-    #                                                          .get_boolean_value(field, DEFAULTED_ON_CREATE_KEY),
-    #                                                          supported_write_operations=list(write_operation_types))
-
-    # return context.FieldDefinition(field_name=salesforce.get_string_value(field, NAME_KEY),
-    #                                data_type=data_type,
-    #                                data_type_label=data_type_label,
-    #                                label=display_name,
-    #                                description=display_name,
-    #                                default_value=salesforce.get_string_value(field, DEFAULT_VALUE_KEY),
-    #                                is_primary_key=salesforce.get_boolean_value(field, UNIQUE_KEY),
-    #                                read_properties=read_operation_property,
-    #                                write_properties=write_operation_property)
-
-    
-        # name = context.FieldDefinition(
-        # field_name="name",
-        # data_type=fields.FieldDataType.String,
-        # data_type_label="string",
-        # label="name",
-        # description="name",
-        # default_value="1970-01-01 00:00:00",
-        # is_primary_key=False,
-        # read_properties=fields.ReadOperationProperty(
-        #     is_queryable=True,
-        #     is_retrievable=True,
-        #     is_nullable=False,
-        #     is_timestamp_field_for_incremental_queries=False,
-        # ),
-        # write_properties=None,
-        # )
+   
 
 
-    return context.FieldDefinition(field_name=field.get('LogicalName'),
+    return context.FieldDefinition(field_name=field.get(LABEL_KEY),
                                 data_type=data_type,
                                 data_type_label=data_type_label,
-                                label=field.get('LogicalName'),
-                                description=field.get('LogicalName'),
+                                label=field.get(LABEL_KEY),
+                                description=field.get(LABEL_KEY),
                                 default_value="1970-01-01 00:00:00",
                                 is_primary_key=field.get('IsPrimaryId'),
                                 read_properties=fields.ReadOperationProperty(
@@ -181,13 +133,10 @@ def convert_data_type(data_type_name: str):
 class SalesforceMetadataHandler(MetadataHandler):
     """Salesforce Metadata handler."""
     def list_entities(self, request: requests.ListEntitiesRequest) -> responses.ListEntitiesResponse:
-        # error_details = validation.validate_request_connector_context(request)
-        # if error_details:
-        #     LOGGER.error('ListEntities request failed with ' + str(error_details))
-        #     return responses.ListEntitiesResponse(is_success=False, error_details=error_details)
-
-
-        
+        error_details = validation.validate_request_connector_context(request)
+        if error_details:
+            LOGGER.error('ListEntities request failed with ' + str(error_details))
+            return responses.ListEntitiesResponse(is_success=False, error_details=error_details)
         if request.entities_path:
             request_uri = salesforce.build_salesforce_request_uri(connector_context=request.connector_context,
                                                                   url_format=D365_OBJECT_URL_FORMAT,
@@ -199,25 +148,15 @@ class SalesforceMetadataHandler(MetadataHandler):
 
         salesforce_response = salesforce.get_salesforce_client(request.connector_context).rest_get(request_uri)
         error_details = salesforce.check_for_errors_in_salesforce_response(salesforce_response)
-
-
-        # LOGGER.error(f'salesforce_response.response = {salesforce_response.response.value}')
         if error_details:
             return responses.ListEntitiesResponse(is_success=False, error_details=error_details)
-        
-
-       
         return responses.ListEntitiesResponse(is_success=True, entities=parse_entities(salesforce_response.response))
 
-        # entity_list = [ACCOUNT_ENTITY]
-
-        # return responses.ListEntitiesResponse(is_success=True, entities=entity_list)
-
     def describe_entity(self, request: requests.DescribeEntityRequest) -> responses.DescribeEntityResponse:
-        # error_details = validation.validate_request_connector_context(request)
-        # if error_details:
-        #     LOGGER.error('DescribeEntity request failed with ' + str(error_details))
-        #     return responses.DescribeEntityResponse(is_success=False, error_details=error_details)
+        error_details = validation.validate_request_connector_context(request)
+        if error_details:
+            LOGGER.error('DescribeEntity request failed with ' + str(error_details))
+            return responses.DescribeEntityResponse(is_success=False, error_details=error_details)
 
 
         LOGGER.error(f'test -> request.entity_identifier === {request.entity_identifier}')
@@ -238,33 +177,3 @@ class SalesforceMetadataHandler(MetadataHandler):
         LOGGER.error(f'test parsed entity_definition =>> {parsed_entity_definition}')
         return responses.DescribeEntityResponse(is_success=True,
                                                 entity_definition=parsed_entity_definition)
-        
-
-        name = context.FieldDefinition(
-        field_name="name",
-        data_type=fields.FieldDataType.String,
-        data_type_label="string",
-        label="name",
-        description="name",
-        default_value="1970-01-01 00:00:00",
-        is_primary_key=False,
-        read_properties=fields.ReadOperationProperty(
-            is_queryable=True,
-            is_retrievable=True,
-            is_nullable=False,
-            is_timestamp_field_for_incremental_queries=False,
-        ),
-        write_properties=None,
-        )
-
-
-        entity_definition = context.EntityDefinition(
-            entity=ACCOUNT_ENTITY,
-            fields=[
-            name
-            ],
-        )
-
-        return responses.DescribeEntityResponse(
-            is_success=True, entity_definition=entity_definition
-        )
